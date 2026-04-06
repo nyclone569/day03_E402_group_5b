@@ -16,45 +16,42 @@ Hệ thống hoạt động dựa trên 3 lớp chính:
 ### Luồng xử lý (Flowchart)
 ```mermaid
 graph TD
-    %% Khởi đầu và Kiểm soát đầu vào
-    Start((Người dùng nhập Query)) --> InputCheck{Hợp lệ & <br/>Có mã CP?}
-    InputCheck -- Không --> Clarify[Fallback 1: Yêu cầu cung cấp mã hợp lệ]
-    Clarify --> Start
+    %% Khởi đầu
+    Start(User Query) --> Guardrail{Kiểm tra phạm vi câu hỏi<br/>Intent Check}
+
+    %% Tầng 1: Unified Fallback cho các trường hợp Out-of-Scope
+    Guardrail -- "Câu hỏi ngoài phạm vi<br/>của Agent" --> UnifiedFallback[Fallback: Unified Out-of-Scope <br/>- Câu hỏi không liên quan]
+    UnifiedFallback --> UI_Msg[Hiển thị thông báo hướng <br/>dẫn về đúng phạm vi CK VN]
+
+    %% Tầng 2: Luồng chính (In-Scope)
+    Guardrail -- "Tra cứu tên công ty, giá cổ phiếu <br> Biểu đồ của cổ phiếu <br/> Mã CK VN hợp lệ" --> AgentBrain[Gemma 4: ReAct Thinking]
     
-    %% Khối xử lý chính của Gemma 4 (ReAct)
-    InputCheck -- Mã hợp lệ (Vd: HPG) --> AgentBrain[Gemma 4: Suy luận ReAct <br/>'Thinking Mode']
-    
-    subgraph ReAct_Core [Vòng lặp Suy luận & Hành động]
-        AgentBrain --> Thought[Thought: Xác định nhu cầu <br/>Giá/Biểu đồ/Tin tức]
-        Thought --> ActionSelection{Chọn Action <br/>từ danh sách}
+    subgraph ReAct_Core [Thinking & Action loop]
+        AgentBrain --> Thought[Thought: Xác định Tool cần gọi]
+        Thought --> ActionSelection{Chọn Action}
         
-        %% Luồng Fallback cho Action (Invalid Tool)
-        ActionSelection -- Sai tên Method/Tool --> ActionError[Fallback 2: Action Error Handler]
-        ActionError --> RetryLimit{Thử lại < 3 lần?}
-        RetryLimit -- Còn lượt --> Feedback[Gửi lỗi 'Tool không tồn tại' <br/>về cho Gemma 4]
-        Feedback --> AgentBrain
-        RetryLimit -- Hết lượt --> HumanEsc[Fallback 4: Chuyển Human Agent]
+        %% Fallback cho Action Name
+        ActionSelection -- "Sai tên Tool" --> ActionErr[Fallback: Action Error Handler <br/>Gửi feedback cho Agent sửa lỗi]
+        ActionErr --> AgentBrain
         
-        %% Luồng Action đúng
-        ActionSelection -- Đúng Tool --> Execute[Thực thi: GetPrice / <br/>CreateChart / GetStockID]
+        %% Thực thi Tool & Xử lý lỗi API
+        ActionSelection -- "Đúng Tool" --> Execute[Gọi API: GetPrice / <br/>CreateChart / GetStockID]
+        Execute --> APICheck{Kết quả API?}
+        
+        APICheck -- "Lỗi (404, 500, Timeout)" --> APIFallback[Fallback: API Error Handler <br/>- Gửi feedback cho Agent <br/>- Chuyển sang Data Source dự phòng]
+        APIFallback --> APICheck
     end
 
-    %% Kiểm tra kết quả từ Tool (Observation)
-    Execute --> Observation{Kết quả Tool?}
+    %% Tầng 3: Observation & Output
+    APICheck -- "Success" --> Observation[Observation: Nhận dữ liệu]
+    Observation --> FinalThought[Thought: Tổng hợp kết quả]
+    FinalThought --> FinalAnswer[Gemma 4: Trả lời người dùng]
+
+    %% Tầng 4: Phao cứu sinh cuối (Human Escalation)
+    APIFallback -- "Thất bại sau 3 lần" --> HumanEsc[Fallback: Human Escalation <br/>Báo lỗi hệ thống & kết nối người thật]
     
-    %% Luồng xử lý kết quả Tool
-    Observation -- Có dữ liệu --> FinalThought[Thought: Đã đủ thông tin]
-    Observation -- Dữ liệu rỗng/Lỗi API --> SearchFallback[Fallback 3: Gọi Search Tool/Google]
-    
-    SearchFallback --> SearchResult{Tìm thấy tin tức?}
-    SearchResult -- Có --> FinalThought
-    SearchResult -- Không --> HumanEsc
-    
-    %% Đầu ra và Hiển thị
-    FinalThought --> FinalAnswer[Gemma 4: Tổng hợp câu trả lời]
-    FinalAnswer --> UI[Hiển thị Text + Biểu đồ Plotly]
-    
-    UI & HumanEsc --> End((Kết thúc phiên))
+    %% Kết thúc
+    FinalAnswer & UI_Msg & HumanEsc --> End(Hiển thị UI)
 ```
 
 ---
