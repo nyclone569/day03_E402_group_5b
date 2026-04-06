@@ -15,15 +15,46 @@ Hệ thống hoạt động dựa trên 3 lớp chính:
 
 ### Luồng xử lý (Flowchart)
 ```mermaid
-graph LR
-    A[Người dùng] --> B[Streamlit UI]
-    B --> C{ReAct Agent}
-    C -->|Suy luận| D[Tool: Stock Search]
-    C -->|Suy luận| E[Tool: Chart Generator]
-    D --> F[Dữ liệu thực tế]
-    E --> G[Biểu đồ Plotly]
-    F & G --> H[Final Answer]
-    H --> B
+graph TD
+    %% Khởi đầu và Kiểm soát đầu vào
+    Start((Người dùng nhập Query)) --> InputCheck{Hợp lệ & <br/>Có mã CP?}
+    InputCheck -- Không --> Clarify[Fallback 1: Yêu cầu cung cấp mã hợp lệ]
+    Clarify --> Start
+    
+    %% Khối xử lý chính của Gemma 4 (ReAct)
+    InputCheck -- Mã hợp lệ (Vd: HPG) --> AgentBrain[Gemma 4: Suy luận ReAct <br/>'Thinking Mode']
+    
+    subgraph ReAct_Core [Vòng lặp Suy luận & Hành động]
+        AgentBrain --> Thought[Thought: Xác định nhu cầu <br/>Giá/Biểu đồ/Tin tức]
+        Thought --> ActionSelection{Chọn Action <br/>từ danh sách}
+        
+        %% Luồng Fallback cho Action (Invalid Tool)
+        ActionSelection -- Sai tên Method/Tool --> ActionError[Fallback 2: Action Error Handler]
+        ActionError --> RetryLimit{Thử lại < 3 lần?}
+        RetryLimit -- Còn lượt --> Feedback[Gửi lỗi 'Tool không tồn tại' <br/>về cho Gemma 4]
+        Feedback --> AgentBrain
+        RetryLimit -- Hết lượt --> HumanEsc[Fallback 4: Chuyển Human Agent]
+        
+        %% Luồng Action đúng
+        ActionSelection -- Đúng Tool --> Execute[Thực thi: GetPrice / <br/>CreateChart / GetStockID]
+    end
+
+    %% Kiểm tra kết quả từ Tool (Observation)
+    Execute --> Observation{Kết quả Tool?}
+    
+    %% Luồng xử lý kết quả Tool
+    Observation -- Có dữ liệu --> FinalThought[Thought: Đã đủ thông tin]
+    Observation -- Dữ liệu rỗng/Lỗi API --> SearchFallback[Fallback 3: Gọi Search Tool/Google]
+    
+    SearchFallback --> SearchResult{Tìm thấy tin tức?}
+    SearchResult -- Có --> FinalThought
+    SearchResult -- Không --> HumanEsc
+    
+    %% Đầu ra và Hiển thị
+    FinalThought --> FinalAnswer[Gemma 4: Tổng hợp câu trả lời]
+    FinalAnswer --> UI[Hiển thị Text + Biểu đồ Plotly]
+    
+    UI & HumanEsc --> End((Kết thúc phiên))
 ```
 
 ---
