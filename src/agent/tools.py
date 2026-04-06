@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 import plotly.graph_objects as go
 import pandas as pd
 from typing import Dict, Any, List
-from vnstock import Vnstock, register_user
+from vnstock import Vnstock, register_user, Company
 
 # Đăng nhập bằng API Key để cải thiện độ chuẩn xác/giới hạn dữ liệu từ hệ thống cấp dữ liệu
 register_user('vnstock_503967bcbf987a7a89727aa469fb957b')
@@ -62,26 +62,47 @@ def CreateChart(symbol: str) -> str:
     except Exception as e:
         raise ConnectionError(f"Lỗi khi vẽ biểu đồ: {str(e)}")
 
-def GetStockID(company_name: str) -> str:
-    """Tra cứu mã cổ phiếu từ tên công ty."""
+def GetInfoID(symbol: str) -> str:
+    """Tra cứu thông tin công ty từ mã cổ phiếu ở múi giờ GMT+7."""
     if SIMULATE_API_ERROR:
         raise ConnectionError("API VNDirect bị bảo trì / Timeout")
 
-    # A mock dictionary for demonstration, or we can use vnstock if it has a fuzzy search.
-    # vnstock's listing feature retrieves all stocks, but we'll mock a few for speed.
-    companies = {
-        "fpt": "FPT",
-        "hòa phát": "HPG",
-        "hoa sen": "HSG",
-        "vietcombank": "VCB",
-        "ssi": "SSI"
-    }
+    symbol = symbol.upper().strip()
     
-    for key in companies:
-        if key in company_name.lower():
-            return f"Mã cổ phiếu của {company_name} là {companies[key]}"
+    try:
+        company = Company(symbol=symbol, source='KBS')
+        df = company.overview()
+        
+        if df is None or df.empty:
+            return f"Không tìm thấy thông tin cho mã {symbol}."
+        
+        info = df.iloc[0].to_dict()
+        
+        # Bỏ các trường liên quan đến giá hiện tại
+        keys_to_remove = [k for k in info.keys() if 'price' in k.lower() or 'giá' in k.lower()]
+        for k in keys_to_remove:
+            info.pop(k, None)
+        
+        vn_tz = datetime.timezone(datetime.timedelta(hours=7))
+        vn_now = datetime.datetime.now(vn_tz)
+        formatted_time = vn_now.strftime('%H:%M:%S %d-%m-%Y')
+        
+        res = f"Thông tin của {symbol} (cập nhật lúc {formatted_time} GMT+7):\n"
+        for k, v in info.items():
+            res += f"- {k}: {v}\n"
             
-    return f"Không tìm thấy mã cổ phiếu hợp lệ cho công ty: {company_name}."
+        try:
+            # Truy xuất trực tiếp dữ liệu giá intraday để có giá chính xác nhất mà không cần gọi hàm GetPrice
+            df_price = Vnstock().stock(symbol=symbol, source='VCI').quote.intraday(symbol=symbol, page_size=2, show_log=False)
+            if df_price is not None and not df_price.empty:
+                latest_price = df_price.iloc[-1]["price"] * 1000 # Cập nhật mốc chia
+                res += f"\nGiá hiện hành chính xác: {latest_price:,.0f} VND\n"
+        except Exception as price_err:
+            res += f"\n(Lỗi khi lấy dữ liệu giá hiện hành: {str(price_err)})\n"
+            
+        return res
+    except Exception as e:
+        raise ConnectionError(f"API API lỗi: {str(e)}")
 
 # Define the tool schemas for the Agent
 TOOLS: List[Dict[str, Any]] = [
@@ -94,8 +115,8 @@ TOOLS: List[Dict[str, Any]] = [
         "description": "Dùng để vẽ biểu đồ kỹ thuật cho một mã chứng khoán. Đầu vào là mã chứng khoán (VD: SSI, VCB)."
     },
     {
-        "name": "GetStockID",
-        "description": "Dùng để tra cứu mã cổ phiếu khi người dùng chỉ cung cấp tên công ty. Đầu vào là tên công ty."
+        "name": "GetInfoID",
+        "description": "Dùng để tra cứu thông tin của công ty từ mã cổ phiếu (VD: FPT). Đầu vào là mã cổ phiếu."
     }
 ]
 
@@ -105,8 +126,8 @@ def execute_tool_logic(tool_name: str, args: str) -> str:
         return GetPrice(args)
     elif tool_name == "CreateChart":
         return CreateChart(args)
-    elif tool_name == "GetStockID":
-        return GetStockID(args)
+    elif tool_name == "GetInfoID":
+        return GetInfoID(args)
     else:
         # Action Error Handler scenario will catch this if the LLM hallucinates
         raise ValueError(f"Sai tên Tool: {tool_name}")
