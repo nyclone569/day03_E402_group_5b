@@ -76,8 +76,8 @@ TOOLS: List[Dict[str, Any]] = [
         "description": "Dùng để vẽ biểu đồ kỹ thuật cho một mã chứng khoán. Đầu vào là mã chứng khoán (VD: SSI, VCB)."
     },
     {
-        "name": "GetStockID",
-        "description": "Dùng để tra cứu mã cổ phiếu khi người dùng chỉ cung cấp tên công ty. Đầu vào là tên công ty."
+        "name": "GetStockInfo",
+        "description": "Dùng để lấy thông tin tổng quan của một mã cổ phiếu. Đầu vào là mã cổ phiếu (VD: FPT)."
     }
 ]
 
@@ -87,8 +87,8 @@ def execute_tool_logic(tool_name: str, args: str) -> str:
         return GetPrice(args)
     elif tool_name == "CreateChart":
         return CreateChart(args)
-    elif tool_name == "GetStockID":
-        return GetStockID(args)
+    elif tool_name == "GetStockInfo":
+        return GetStockInfo(args)
     else:
         # Action Error Handler scenario will catch this if the LLM hallucinates
         raise ValueError(f"Sai tên Tool: {tool_name}")

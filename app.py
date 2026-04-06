@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from src.core.gemini_provider import GeminiProvider
 from src.agent.agent import ReActAgent
 from src.agent.tools import TOOLS
+import src.agent.tools as agent_tools
 
 # Load environment variables (e.g., GEMINI_API_KEY)
 load_dotenv()
@@ -21,6 +22,11 @@ api_key = os.getenv("GEMINI_API_KEY")
 with st.sidebar:
     st.header("⚙️ Cấu hình")
     model_name = st.text_input("Tên Model", value="gemma-4-31b-it") # Or fallback to gemini-1.5-flash
+    
+    st.markdown("---")
+    st.markdown("🛠️ **Môi trường Test**")
+    simulate_error = st.checkbox("Mô phỏng lỗi API (Testcase 5)", value=False)
+    agent_tools.SIMULATE_API_ERROR = simulate_error
     
     if not api_key:
         st.error("Lỗi: Chưa cấu hình GEMINI_API_KEY trong file .env!")
