@@ -40,11 +40,11 @@ def CreateChart(symbol: str) -> str:
 
     symbol = symbol.upper().strip()
     end_date = datetime.date.today().strftime("%Y-%m-%d")
-    start_date = (datetime.date.today() - datetime.timedelta(days=30)).strftime("%Y-%m-%d")
+    start_date = (datetime.date.today() - datetime.timedelta(days=60)).strftime("%Y-%m-%d")
     
     try:
         quote = Quote(symbol=symbol, source='VCI')
-        df = quote.history(start=start_date, end=end_date, interval='d')
+        df = quote.history(start=start_date, end=end_date, interval='1H')
         if df.empty:
             return f"Không có dữ liệu để vẽ biểu đồ cho mã {symbol}."
             
@@ -56,7 +56,12 @@ def CreateChart(symbol: str) -> str:
             close=df['close']
         )])
         
-        fig.update_layout(title=f'Biểu đồ nến {symbol}', xaxis_title='Ngày', yaxis_title='Giá', template='plotly_dark')
+        fig.update_layout(title=f'Biểu đồ nến theo giờ {symbol}', xaxis_title='Thời gian', yaxis_title='Giá', template='plotly_dark', xaxis_rangeslider_visible=False)
+        fig.update_xaxes(rangebreaks=[
+            dict(bounds=["sat", "mon"]), # Ẩn thứ 7, Chủ Nhật
+            dict(bounds=[15, 9], pattern="hour"), # Ẩn từ 15h chiều đến 9h sáng hôm sau
+            dict(bounds=[11.5, 13], pattern="hour") # Ẩn giờ nghỉ trưa 11h30 - 13h00
+        ])
         
         if "temp_charts" not in st.session_state:
             st.session_state.temp_charts = []

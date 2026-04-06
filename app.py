@@ -19,7 +19,7 @@ st.markdown("Hệ thống Hỏi đáp Chứng khoán thông minh sử dụng Gem
 with st.sidebar:
     st.header("⚙️ Cấu hình")
     api_key = st.text_input("Google AI Studio API Key", type="password", value=os.getenv("GEMINI_API_KEY", ""))
-    model_name = st.text_input("Tên Model", value="gemini-2.5-flash") # Or fallback to gemini-1.5-flash
+    model_name = st.text_input("Tên Model", value="gemma-4-31b-it") # Or fallback to gemini-1.5-flash
     
     if not api_key:
         st.warning("Vui lòng cung cấp API Key để tiếp tục.")
@@ -34,7 +34,7 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
         if "charts" in message and message["charts"]:
             for fig in message["charts"]:
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig)
 
 # Chat Input
 if prompt := st.chat_input("Hỏi tôi về giá mã chứng khoán (VD: Giá FPT)"):
@@ -62,7 +62,7 @@ if prompt := st.chat_input("Hỏi tôi về giá mã chứng khoán (VD: Giá FP
                 # Fetch any charts generated during the agent run
                 charts = st.session_state.pop("temp_charts", [])
                 for fig in charts:
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig)
                     
                 st.session_state.messages.append({
                     "role": "assistant", 
@@ -75,7 +75,7 @@ if prompt := st.chat_input("Hỏi tôi về giá mã chứng khoán (VD: Giá FP
                 
                 charts = st.session_state.pop("temp_charts", [])
                 for fig in charts:
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig)
                     
                 st.session_state.messages.append({
                     "role": "assistant", 

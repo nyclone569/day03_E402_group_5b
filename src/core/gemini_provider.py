@@ -19,7 +19,10 @@ class GeminiProvider(LLMProvider):
         if system_prompt:
             full_prompt = f"System: {system_prompt}\n\nUser: {prompt}"
 
-        response = self.model.generate_content(full_prompt)
+        response = self.model.generate_content(
+            full_prompt,
+            generation_config={"stop_sequences": ["Observation:"]}
+        )
 
         end_time = time.time()
         latency_ms = int((end_time - start_time) * 1000)
@@ -44,6 +47,10 @@ class GeminiProvider(LLMProvider):
         if system_prompt:
             full_prompt = f"System: {system_prompt}\n\nUser: {prompt}"
 
-        response = self.model.generate_content(full_prompt, stream=True)
+        response = self.model.generate_content(
+            full_prompt, 
+            stream=True,
+            generation_config={"stop_sequences": ["Observation:"]}
+        )
         for chunk in response:
             yield chunk.text
