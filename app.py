@@ -57,8 +57,15 @@ if prompt := st.chat_input("Hỏi tôi về giá mã chứng khoán (VD: Giá FP
     with st.chat_message("assistant"):
         with st.spinner("Agent đang suy nghĩ..."):
             try:
+                import time
+                start_time = time.time()
                 # Run the ReAct Loop
                 result = agent.run(prompt)
+                latency = time.time() - start_time
+                steps = getattr(agent, 'current_steps', 0)
+                
+                meta_str = f"⏱️ Thời gian xử lý: {latency:.2f}s | 🔄 Số bước suy luận (ReAct Steps): {steps}"
+                
                 st.markdown(result)
                 
                 # Fetch any charts generated during the agent run

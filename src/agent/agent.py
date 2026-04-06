@@ -96,6 +96,7 @@ class ReActAgent:
         if not self._check_intent(user_input):
             logger.log_event("FALLBACK_OUT_OF_SCOPE", {"input": user_input})
             logger.log_event("AGENT_END", {"steps": 0})
+            self.current_steps = 0
             return "Xin lỗi, tôi chỉ hỗ trợ tra cứu thông tin tĩnh về Chứng khoán Việt Nam (giá, biểu đồ, mã công ty). Tôi không hỗ trợ đặt lệnh, mua bán, hoặc dự báo vàng/ngoại tệ."
 
         current_prompt = f"User Query: {user_input}\n"
@@ -116,7 +117,8 @@ class ReActAgent:
             # Check for Final Answer
             final_match = final_answer_regex.search(content)
             if final_match:
-                logger.log_event("AGENT_END", {"steps": steps})
+                logger.log_event("AGENT_END", {"steps": steps + 1})
+                self.current_steps = steps + 1
                 return final_match.group(1).strip()
             
             # Parse Thought/Action from result
@@ -145,7 +147,8 @@ class ReActAgent:
                         if api_failure_count >= 3:
                             fallback_msg = "Xin lỗi, Dữ liệu API hiện đang cập nhật chậm hoặc bị bảo trì. Vui lòng liên hệ người thật hoặc thử lại sau."
                             logger.log_event("FALLBACK_HUMAN_ESCALATION", {"failures": api_failure_count})
-                            logger.log_event("AGENT_END", {"steps": steps})
+                            logger.log_event("AGENT_END", {"steps": steps + 1})
+                            self.current_steps = steps + 1
                             return fallback_msg
                         else:
                             current_prompt += f"Observation: Lỗi API ({str(e)}). Vui lòng Action thử lại.\n"
@@ -156,4 +159,5 @@ class ReActAgent:
             steps += 1
             
         logger.log_event("AGENT_END", {"steps": steps})
+        self.current_steps = steps
         return "Xin lỗi, hệ thống AI đã suy nghĩ quá lâu (vượt quá số bước tối đa) mà không tìm được kết quả."
