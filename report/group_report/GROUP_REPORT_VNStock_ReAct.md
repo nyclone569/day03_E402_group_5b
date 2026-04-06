@@ -56,26 +56,46 @@ def chatbot_answer(user_input: str) -> str:
 
 *Phiên bản đầu tiên hoạt động được với Thought-Action-Observation loop và tối thiểu 2 tool.*
 
+```mermaid
+ graph TD
+    %% Khởi đầu
+    Start(User Query) --> Guardrail{Kiểm tra phạm vi câu hỏi<br/>Intent Check}
+
+    %% Tầng 1: Unified Fallback cho các trường hợp Out-of-Scope
+    Guardrail -- "Câu hỏi ngoài phạm vi<br/>của Agent" --> UnifiedFallback[Fallback: Unified Out-of-Scope <br>- Câu hỏi không liên quan]
+    UnifiedFallback --> UI_Msg[Hiển thị thông báo hướng <br>dẫn về đúng phạm vi CK VN]
+
+    %% Tầng 2: Luồng chính (In-Scope)
+    Guardrail -- "-Tra cứu giá cổ phiếu, thông tin liên quan<br>-Biểu đồ của cổ phiếu <br/>-Mã CK VN hợp lệ" --> AgentBrain[Gemma 4: ReAct Thinking]
+    
+    subgraph ReAct_Core [Thinking & Action loop]
+        AgentBrain --> Thought[Thought: Xác định Tool cần gọi]
+        Thought --> ActionSelection{Chọn Action}
+        
+        %% Fallback cho Action Name
+        ActionSelection -- "Sai tên Tool" --> ActionErr[Fallback: Action Error Handler <br>Gửi feedback cho Agent sửa lỗi]
+        ActionErr --> AgentBrain
+        
+        %% Thực thi Tool & Xử lý lỗi API
+        ActionSelection -- "Đúng Tool" --> Execute[Gọi API: GetPrice / <br>CreateChart / GetStockInfo]
+        Execute --> APICheck{Kết quả API?}
+        
+        APICheck -- "Lỗi (404, 500, Timeout)" --> APIFallback[Fallback: API Error Handler <br>- Gửi feedback cho Agent <br>- Chuyển sang Data Source dự phòng]
+        APIFallback --> APICheck
+    end
+
+    %% Tầng 3: Observation & Output
+    APICheck -- "Success" --> Observation[Observation: Nhận dữ liệu]
+    Observation --> FinalThought[Thought: Tổng hợp kết quả]
+    FinalThought --> FinalAnswer[Gemma 4: Trả lời người dùng]
+
+    %% Tầng 4: Phao cứu sinh cuối (Human Escalation)
+    APIFallback -- "Thất bại sau 3 lần" --> HumanEsc[Fallback: Human Escalation <br>Báo lỗi hệ thống & kết nối người thật]
+    
+    %% Kết thúc
+    FinalAnswer & UI_Msg & HumanEsc --> End(Hiển thị UI)
 ```
-User Query
-    │
-    ▼
-[Guardrail / Intent Check]
-    │                        └──(Out-of-scope)──► Fallback Response
-    ▼ (In-scope: VN Stock)
-[Gemma 4 — Thought]
-    │
-    ▼
-[Action Parsing — regex match]
-    ├──(Invalid tool name)──► Action Error Handler ──► Retry (feed error back to LLM)
-    └──(Valid tool)──────────► Tool Execution
-                                    │
-                                    ▼
-                              [Observation: tool result]
-                                    │
-                                    ▼
-                              [Next Thought] ──(Final Answer found)──► UI Display
-```
+
 
 - **LLM Provider (Primary)**: Google **Gemma 4** (`gemma-4`, `temperature=0`) — dùng cho toàn bộ vòng lặp Thought-Action-Observation.
 - **LLM Provider (Secondary/Backup)**: OpenAI GPT-4o (`src/core/openai_provider.py`) — khi Gemma 4 quota bị giới hạn.
@@ -326,5 +346,3 @@ graph TD
 
 ---
 
-> [!NOTE]
-> Submit this report by renaming it to `GROUP_REPORT_[TEAM_NAME].md` and placing it in this folder.
