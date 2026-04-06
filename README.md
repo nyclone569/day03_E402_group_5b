@@ -57,7 +57,7 @@ Hệ thống hoạt động dựa trên 3 lớp chính:
 | STT | Câu hỏi người dùng | Hành động mong đợi của Agent |
 | :--- | :--- | :--- |
 | 1 | "Giá FPT hôm nay" | Gọi `GetPrice`, trả về số tiền VND. |
-| 2 | "Vẽ biểu đồ kỹ thuật mã SSI" | Gọi `CreateChart`, kích hoạt Plotly trên UI. |
+| 2 | "Vẽ biểu đồ cho mã SSI" | Gọi `CreateChart`, trả về biểu đồ nến của cổ phiếu trong vòng 30 ngày. |
 | 3 | "Thông tin cổ phiếu FPT" | Gọi `GetStockInfo` để kiểm tra các thông tin của mã cổ phiếu. |
 | 4 | "Mua 1000 cổ phiếu VCB" | Nhận diện Out-of-scope (VN Stock) -> Trả lời chung chung hoặc xin lỗi. |
 | 5 | "API VNDirect bị bảo trì" | Agent thử lại hoặc báo "Dữ liệu đang cập nhật chậm". |
