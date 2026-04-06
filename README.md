@@ -11,7 +11,7 @@ Hệ thống hoạt động dựa trên 3 lớp chính:
 
 ### Luồng xử lý (Flowchart)
 ```mermaid
-graph TD
+ graph TD
     %% Khởi đầu
     Start(User Query) --> Guardrail{Kiểm tra phạm vi câu hỏi<br/>Intent Check}
 
@@ -20,7 +20,7 @@ graph TD
     UnifiedFallback --> UI_Msg[Hiển thị thông báo hướng <br/>dẫn về đúng phạm vi CK VN]
 
     %% Tầng 2: Luồng chính (In-Scope)
-    Guardrail -- "Tra cứu tên công ty, giá cổ phiếu <br> Biểu đồ của cổ phiếu <br/> Mã CK VN hợp lệ" --> AgentBrain[Gemma 4: ReAct Thinking]
+    Guardrail -- "-Tra cứu giá cổ phiếu, thông tin liên quan<br>-Biểu đồ của cổ phiếu <br/>-Mã CK VN hợp lệ" --> AgentBrain[Gemma 4: ReAct Thinking]
     
     subgraph ReAct_Core [Thinking & Action loop]
         AgentBrain --> Thought[Thought: Xác định Tool cần gọi]
@@ -57,12 +57,10 @@ graph TD
 | STT | Câu hỏi người dùng | Hành động mong đợi của Agent |
 | :--- | :--- | :--- |
 | 1 | "Giá FPT hôm nay" | Gọi `GetPrice`, trả về số tiền VND. |
-| 2 | "So sánh giá HPG và HSG" | Gọi `GetPrice` 2 lần, thực hiện phép trừ/so sánh. |
-| 3 | "Vẽ biểu đồ kỹ thuật mã SSI" | Gọi `CreateChart`, kích hoạt Plotly trên UI. |
-| 4 | "Dự báo giá vàng thế giới" | Nhận diện Out-of-scope (VN Stock) -> Trả lời chung chung hoặc xin lỗi. |
-| 5 | "Mua 1000 cổ phiếu VCB" | Nhận diện Out-of-scope (VN Stock) -> Trả lời chung chung hoặc xin lỗi. |
-| 6 | "API VNDirect bị bảo trì" | Agent thử lại hoặc báo "Dữ liệu đang cập nhật chậm". |
-| 7 | "Gõ sai `Get_Price`" | Hệ thống nhắc Agent dùng `GetPrice`, Agent tự sửa. |
+| 2 | "Vẽ biểu đồ kỹ thuật mã SSI" | Gọi `CreateChart`, kích hoạt Plotly trên UI. |
+| 3 | "Thông tin cổ phiếu FPT" | Gọi `GetStockInfo` để kiểm tra các thông tin của mã cổ phiếu. |
+| 4 | "Mua 1000 cổ phiếu VCB" | Nhận diện Out-of-scope (VN Stock) -> Trả lời chung chung hoặc xin lỗi. |
+| 5 | "API VNDirect bị bảo trì" | Agent thử lại hoặc báo "Dữ liệu đang cập nhật chậm". |
 ---
 
 ## 5. Hướng dẫn cài đặt nhanh

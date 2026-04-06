@@ -33,6 +33,8 @@ if "messages" not in st.session_state:
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        if "meta" in message:
+            st.caption(message["meta"])
 
 # Chat Input
 if prompt := st.chat_input("Hỏi tôi về giá mã chứng khoán (VD: Giá FPT)"):
@@ -52,10 +54,18 @@ if prompt := st.chat_input("Hỏi tôi về giá mã chứng khoán (VD: Giá FP
     with st.chat_message("assistant"):
         with st.spinner("Agent đang suy nghĩ..."):
             try:
+                import time
+                start_time = time.time()
                 # Run the ReAct Loop
                 result = agent.run(prompt)
+                latency = time.time() - start_time
+                steps = getattr(agent, 'current_steps', 0)
+                
+                meta_str = f"⏱️ Thời gian xử lý: {latency:.2f}s | 🔄 Số bước suy luận (ReAct Steps): {steps}"
+                
                 st.markdown(result)
-                st.session_state.messages.append({"role": "assistant", "content": result})
+                st.caption(meta_str)
+                st.session_state.messages.append({"role": "assistant", "content": result, "meta": meta_str})
             except Exception as e:
                 error_msg = f"Đã xảy ra lỗi hệ thống: {str(e)}"
                 st.error(error_msg)
