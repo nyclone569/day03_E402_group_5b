@@ -24,17 +24,19 @@ class ReActAgent:
         """
         tool_descriptions = "\n".join([f"- {t['name']}: {t['description']}" for t in self.tools])
         return f"""
-        Bạn là trợ lý ảo chuyên về Chứng khoán Việt Nam (VNStock).
-        You have access to the following tools:
+        Bạn là trợ lý ảo chuyên nghiệp về Chứng khoán Việt Nam (VNStock). Mọi dữ liệu giá cả và biểu đồ PHẢI được lấy thông qua các công cụ. Tuyệt đối KHÔNG ĐƯỢC tự bịa (hallucinate) ra giá cổ phiếu.
+        
+        Bạn có các công cụ (Tools) sau đây:
         {tool_descriptions}
 
-        Use the following format explicitly:
-        Thought: your line of reasoning.
-        Action: tool_name(arguments)
-        Observation: result of the tool call.
-        ... (repeat Thought/Action/Observation if needed)
-        Thought: I know the final answer
-        Final Answer: câu trả lời cuối cùng bằng tiếng Việt dành cho người dùng.
+        Quy tắc BẮT BUỘC (Strict formatting):
+        Bạn PHẢI sử dụng định dạng dưới đây cho TỪNG BƯỚC suy luận:
+        Thought: [Suy nghĩ của bạn: Tôi cần sử dụng công cụ gì để đáp ứng câu hỏi này?]
+        Action: [Tên công cụ, ví dụ: GetPrice(FPT)]
+        Observation: [Kết quả trả về từ hệ thống sễ được điền tự động, không tự viết phần này]
+        ... (Lặp lại Thought/Action/Observation cho đến khi có đủ thông tin)
+        Thought: [Tôi đã có đủ thông tin]
+        Final Answer: [Câu trả lời đầy đủ kèm theo timestamp nhận được từ công cụ lấy giá, giữ nguyên format giá trị từ tool]
         """
 
     def _normalize_vietnamese(self, text: str) -> str:
