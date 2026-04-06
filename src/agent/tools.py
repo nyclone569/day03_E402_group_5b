@@ -85,7 +85,7 @@ def CreateChart(symbol: str) -> str:
     except Exception as e:
         raise ConnectionError(f"Lỗi khi vẽ biểu đồ: {str(e)}")
 
-def GetInfoID(symbol: str) -> str:
+def GetStockInfo(symbol: str) -> str:
     """Tra cứu thông tin công ty từ mã cổ phiếu ở múi giờ GMT+7."""
     if SIMULATE_API_ERROR:
         raise ConnectionError("API VNDirect bị bảo trì / Timeout")
