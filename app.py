@@ -3,7 +3,6 @@ import os
 from dotenv import load_dotenv
 
 from src.core.gemini_provider import GeminiProvider
-from src.core.local_provider import LocalProvider
 from src.agent.agent import ReActAgent
 from src.agent.tools import TOOLS
 
@@ -16,7 +15,7 @@ st.title("📈 VNStock ReAct Agent")
 st.markdown("Hệ thống Hỏi đáp Chứng khoán thông minh sử dụng Gemma-4 và LangChain logic (ReAct).")
 
 # Lấy API Key ngầm từ biến môi trường
-api_key = os.getenv("GEMINI_API_KEY")
+api_key = os.getenv("GEMINI_API_KEY")   
 
 # Setup Sidebar Config
 with st.sidebar:
@@ -55,7 +54,6 @@ if prompt := st.chat_input("Hỏi tôi về giá mã chứng khoán (VD: Giá FP
 
     # Instantiate the Backend Agent
     llm = GeminiProvider(model_name=model_name, api_key=api_key)
-    # llm = LocalProvider(model_path="./models/gemma-3-4b-it.gguf")
     agent = ReActAgent(llm=llm, tools=TOOLS, max_steps=5)
 
     with st.chat_message("assistant"):
