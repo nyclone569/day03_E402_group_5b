@@ -1,7 +1,14 @@
-openai>=1.0.0
-google-generativeai>=0.5.0
+streamlit
+pandas
+plotly
+langchain
+langchain-google-genai
+vnstock
+serpapi
 python-dotenv>=1.0.0
 pydantic>=2.0.0
 requests>=2.31.0
 pytest>=7.4.0
+google-generativeai>=0.5.0
+openai>=1.0.0
 llama-cpp-python>=0.2.0
