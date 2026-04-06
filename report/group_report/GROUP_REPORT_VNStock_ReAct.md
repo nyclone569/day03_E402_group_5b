@@ -18,7 +18,7 @@ Nhóm xây dựng **VNStock ReAct Agent** — hệ thống hỏi đáp chứng k
 
 - **Agent Goal**: Trả lời câu hỏi về cổ phiếu VN (giá, biểu đồ, thông tin công ty) với dữ liệu thời gian thực, thay thế chatbot chỉ dựa vào training knowledge.
 - **Success Rate**: Agent v2 đạt **83% (5/6 test cases)** vs Chatbot Baseline **33% (2/6 test cases)**.
-- **Key Outcome**: Agent giải quyết **100% tác vụ multi-step** (so sánh 2 mã, kết hợp `GetInfo` + `GetPrice`) — loại câu hỏi mà Chatbot hoàn toàn thất bại. Tổng lỗi tool call giảm **67%** từ v1 → v2.
+- **Key Outcome**: Agent giải quyết **100% tác vụ multi-step** (so sánh 2 mã, kết hợp `GetStockInfo` + `GetPrice`) — loại câu hỏi mà Chatbot hoàn toàn thất bại. Tổng lỗi tool call giảm **67%** từ v1 → v2.
 
 ---
 
@@ -97,13 +97,13 @@ User Query
 | :--- | :--- | :--- | :--- | :--- |
 | `GetPrice` | `string` — mã ticker 3 chữ cái | Giá cổ phiếu VN (VND) | v1 | *(mới)* |
 | `CreateChart` | `string` — mã ticker 3 chữ cái | Vẽ Candlestick qua Plotly trên Streamlit UI | v2 | *(mới — thêm sau khi user phản hồi cần visualize)* |
-| `GetInfo` | `string` — mã ticker 3 chữ cái | Thông tin công ty — dùng **Gemma 4** tóm tắt | v2 | *(mới — thêm sau khi phát hiện gap tra cứu công ty)* |
+| `GetStockInfo` | `string` — mã ticker 3 chữ cái | Thông tin công ty — dùng **Gemma 4** tóm tắt | v2 | *(mới — thêm sau khi phát hiện gap tra cứu công ty)* |
 | `GetPrice` (v2) | `string` — mã ticker 3 chữ cái | Giá cổ phiếu VN (VND) | v2 | Thêm validation: reject input không phải 3 chữ cái VN |
 
 **Lý do thay đổi spec từ v1 → v2:**
 
 1. **`GetPrice` input validation**: v1 chấp nhận cả tên công ty đầy đủ → agent hallucinate `GetPrice("HoaPhat")`. v2 validate: nếu input không phải mã 3 ký tự, trả về error message hướng dẫn agent tự sửa.
-2. **Thêm `GetInfo`**: v1 không có tool tra cứu thông tin công ty → agent trả lời từ training data khi bị hỏi *"Vinamilk là công ty gì?"*. v2 thêm `GetInfo` dùng Gemma 4 riêng để tóm tắt thông tin cấu trúc.
+2. **Thêm `GetStockInfo`**: v1 không có tool tra cứu thông tin công ty → agent trả lời từ training data khi bị hỏi *"Vinamilk là công ty gì?"*. v2 thêm `GetStockInfo` dùng Gemma 4 riêng để tóm tắt thông tin cấu trúc.
 
 ### 3.3 Agent v2 — Improvements
 <!-- Rubric: Agent v2 (Improved) — 7 pts -->
@@ -114,7 +114,7 @@ User Query
 | :--- | :--- | :--- | :--- |
 | Few-Shot examples trong system prompt | Agent gọi `GetPrice("HoaPhat")` thay vì `GetPrice("HPG")` | Thêm 3 ví dụ ánh xạ tên công ty → ticker | Tool error giảm từ 27% → 6.7% |
 | Context dedup rule | Agent gọi lặp `GetPrice(HPG)` vì không nhớ đã có kết quả | Thêm rule: *"Không gọi lại Action đã có Observation"* | Infinite loop cases: 3 → 0 |
-| Output length constraint cho `GetInfo` | Gemma 4 trong `GetInfo` sinh >500 token → truncate context | Giới hạn: *"ĐÚNG 1 câu, tối đa 50 từ"* trong summary prompt | Token/task: 520 → 480 |
+| Output length constraint cho `GetStockInfo` | Gemma 4 trong `GetStockInfo` sinh >500 token → truncate context | Giới hạn: *"ĐÚNG 1 câu, tối đa 50 từ"* trong summary prompt | Token/task: 520 → 480 |
 | Out-of-scope guardrail | Agent cố gọi `GetPrice("XAUUSD")` cho câu hỏi về vàng | Kiểm tra ticker trước khi thực thi: nếu không trong danh sách VN → fallback | Out-of-scope accuracy: 0% → 100% |
 
 ---
@@ -134,7 +134,7 @@ User Query
 | **Total Cost of Test Suite** | ~$0.01 | ~$0.06 | ~$0.04 |
 | **Accuracy (correct answers)** | 33% (2/6) | 67% (4/6) | 83% (5/6) |
 
-> **Key Insight:** Latency giảm 17% từ v1→v2 nhờ giảm số bước trung bình (2.8→2.1) — đến từ việc fix infinite loop và output constraint trên `GetInfo`. Token/task giảm 8% dù thêm `GetInfo` tool, vì constraint tóm tắt 1 câu tránh context phình to.
+> **Key Insight:** Latency giảm 17% từ v1→v2 nhờ giảm số bước trung bình (2.8→2.1) — đến từ việc fix infinite loop và output constraint trên `GetStockInfo`. Token/task giảm 8% dù thêm `GetStockInfo` tool, vì constraint tóm tắt 1 câu tránh context phình to.
 
 ---
 
@@ -152,8 +152,8 @@ User Query
 
 Thought: Người dùng hỏi 2 thứ: (1) thông tin công ty Vinamilk, (2) giá hôm nay.
          Mã ticker của Vinamilk là VNM. Bước 1: Lấy thông tin công ty.
-Action: GetInfo(VNM)
-[TOOL_CALL] tool=GetInfo, args=VNM
+Action: GetStockInfo(VNM)
+[TOOL_CALL] tool=GetStockInfo, args=VNM
 Observation: 📊 VNM — Vinamilk (Công ty CP Sữa Việt Nam) là doanh nghiệp sữa
              hàng đầu VN, niêm yết HOSE, vốn hoá ~152,000 tỷ VND, ngành Thực phẩm.
 
@@ -220,7 +220,7 @@ Observation: Không tìm thấy mã 'HOAHATGROUP'.
 | TC1: Giá FPT hôm nay | ❌ Hallucinated | ✅ Correct (1 step) | ✅ Correct (1 step) | **Agent** |
 | TC2: So sánh HPG và HSG | ❌ Hallucinated cả 2 | ❌ Infinite loop | ✅ Correct (2 steps) | **Agent v2** |
 | TC3: Vẽ biểu đồ SSI | ❌ Không thể render | ❌ Không có tool (v1 chưa có CreateChart) | ✅ Correct — `CreateChart(SSI)` | **Agent v2** |
-| TC4: Vinamilk là công ty gì? | ⚠️ Training data (thiếu vốn hoá) | ❌ Không có tool | ✅ Correct — `GetInfo(VNM)` | **Agent v2** |
+| TC4: Vinamilk là công ty gì? | ⚠️ Training data (thiếu vốn hoá) | ❌ Không có tool | ✅ Correct — `GetStockInfo(VNM)` | **Agent v2** |
 | TC5: Dự báo giá vàng | ✅ Từ chối lịch sự | ❌ Cố gọi `GetPrice(XAUUSD)` | ✅ Out-of-scope fallback | **Chatbot / Agent v2** |
 | TC6: Chứng khoán là gì? | ✅ Correct (~180ms) | ✅ Correct (~1,800ms) | ✅ Correct (~1,500ms) | **Chatbot** (latency) |
 
@@ -233,7 +233,7 @@ Observation: Không tìm thấy mã 'HOAHATGROUP'.
 | :--- | :--- | :--- | :--- |
 | Few-Shot examples | 0 ví dụ | 3 ví dụ (tên→ticker) | ↓ tool arg error: 27% → 6.7% |
 | Context dedup rule | ❌ Không có | ✅ "Đừng gọi lại action đã có Observation" | ↓ infinite loop: 3 → 0 cases |
-| Output length constraint | ❌ Không có | ✅ "Đúng 1 câu, tối đa 50 từ" cho `GetInfo` | ↓ avg tokens: 520 → 480 |
+| Output length constraint | ❌ Không có | ✅ "Đúng 1 câu, tối đa 50 từ" cho `GetStockInfo` | ↓ avg tokens: 520 → 480 |
 | Out-of-scope guardrail | ❌ Không có | ✅ Ticker validation trước khi execute | ↑ out-of-scope accuracy: 0% → 100% |
 
 **Overall**: Accuracy tổng thể tăng từ **67% (v1) → 83% (v2)** chỉ từ prompt engineering — không thay đổi model.
@@ -256,7 +256,7 @@ graph TD
         Parse -- Invalid tool name --> ErrMsg[Feed error back to LLM] --> Brain
         Parse -- GetPrice --> P[GetPrice Tool\nReal-time price VND]
         Parse -- CreateChart --> C[CreateChart Tool\nPlotly Candlestick UI]
-        Parse -- GetInfo --> I[GetInfo Tool\nGemma 4 summary]
+        Parse -- GetStockInfo --> I[GetStockInfo Tool\nGemma 4 summary]
         P & C & I --> Obs[Observation]
         Obs --> Brain
     end
@@ -280,8 +280,8 @@ graph TD
 *Cơ chế xử lý lỗi chủ động được tích hợp vào hệ thống Agent v2.*
 
 - **Max Steps Guard**: `max_steps = 5` — Agent dừng và trả về error message thân thiện sau 5 vòng lặp thất bại; không để hệ thống spin vô hạn.
-- **Action Error Handler**: Nếu tên tool không nằm trong registry, `_execute_tool()` trả về `f"Tool {tool_name} not found. Available tools: GetPrice, CreateChart, GetInfo."` — LLM nhận error message này như Observation và tự sửa.
-- **Input Validation trong Tool**: `GetPrice` và `GetInfo` validate ticker trước khi lookup — nếu input không hợp lệ, trả về hướng dẫn rõ ràng thay vì KeyError.
+- **Action Error Handler**: Nếu tên tool không nằm trong registry, `_execute_tool()` trả về `f"Tool {tool_name} not found. Available tools: GetPrice, CreateChart, GetStockInfo."` — LLM nhận error message này như Observation và tự sửa.
+- **Input Validation trong Tool**: `GetPrice` và `GetStockInfo` validate ticker trước khi lookup — nếu input không hợp lệ, trả về hướng dẫn rõ ràng thay vì KeyError.
 - **API Timeout Wrapper**: Tool calls wrap trong try/except với timeout 10 giây — khi timeout, trả về `"API tạm thời không khả dụng, hãy thử lại"` thay vì crash toàn bộ agent.
 - **Out-of-Scope Guardrail**: Bước kiểm tra intent ở đầu pipeline — câu hỏi không có ticker VN hợp lệ được chuyển hướng về Fallback Response trước khi vào ReAct loop.
 
@@ -294,12 +294,12 @@ graph TD
 
 | Tool Name | Type | Model | Description |
 | :--- | :--- | :--- | :--- |
-| `GetInfo` | LLM-powered summary | **Gemma 4** (instance riêng) | Tra cứu tên công ty, ngành nghề, vốn hoá, sàn niêm yết — Gemma 4 tóm tắt thành 1 câu tiếng Việt dễ đọc cho nhà đầu tư cá nhân |
+| `GetStockInfo` | LLM-powered summary | **Gemma 4** (instance riêng) | Tra cứu tên công ty, ngành nghề, vốn hoá, sàn niêm yết — Gemma 4 tóm tắt thành 1 câu tiếng Việt dễ đọc cho nhà đầu tư cá nhân |
 
-**Thiết kế `GetInfo`:**
+**Thiết kế `GetStockInfo`:**
 - Dùng **Gemma 4 riêng biệt** (`temperature=0`), tách khỏi LLM của ReAct loop — tránh ảnh hưởng Thought-Action parsing.
 - Output constraint cứng: tối đa 1 câu / 50 từ — phòng context overflow trong ReAct loop.
-- Tích hợp liền mạch qua `_execute_tool()` — Agent có thể chain `GetInfo(VNM)` → `GetPrice(VNM)` trong 1 lần run.
+- Tích hợp liền mạch qua `_execute_tool()` — Agent có thể chain `GetStockInfo(VNM)` → `GetPrice(VNM)` trong 1 lần run.
 
 ---
 
