@@ -67,18 +67,84 @@ if prompt := st.chat_input("Hỏi tôi về giá mã chứng khoán (VD: Giá FP
                     response = llm.generate(baseline_prompt)
                     result = response.get("content", "Lỗi: Không có phản hồi từ LLM.")
                     latency = time.time() - start_time
+                    usage = response.get("usage", {})
                     meta_str = f"⏱️ Thời gian xử lý: {latency:.2f}s | 🧠 Chế độ: Baseline (Dùng não tự đoán)"
+                    
+                    st.markdown(result)
+                    st.caption(meta_str)
+                    
+                    # Baseline trace đơn giản
+                    with st.expander("📊 Chi tiết Baseline"):
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric("⏱️ Latency", f"{latency:.2f}s")
+                        col2.metric("🔢 Tokens", f"{usage.get('total_tokens', 0):,}")
+                        col3.metric("🛡️ Tools Used", "0")
+                        st.info("ℹ️ Baseline gọi LLM 1 lần duy nhất, không qua Guardrail hay Tool.")
+                    
+                    st.session_state.messages.append({"role": "assistant", "content": result, "meta": meta_str})
                 else:
                     # Run the ReAct Loop
                     result = agent.run(prompt)
                     latency = time.time() - start_time
                     steps = getattr(agent, 'current_steps', 0)
                     meta_str = f"⏱️ Thời gian xử lý: {latency:.2f}s | 🔄 Số bước suy luận (ReAct Steps): {steps}"
-                
-                st.markdown(result)
-                st.caption(meta_str)
-                st.session_state.messages.append({"role": "assistant", "content": result, "meta": meta_str})
+                    
+                    st.markdown(result)
+                    st.caption(meta_str)
+                    
+                    # === TRACE PANEL ===
+                    with st.expander("🔍 ReAct Trace (Thought → Action → Observation)"):
+                        for trace in agent.trace_log:
+                            step_num = trace.get("step", "?")
+                            trace_type = trace.get("type", "")
+                            
+                            if trace_type == "guardrail":
+                                st.markdown(f"**Step {step_num}: 🛡️ Guardrail — {trace.get('action', '')}**")
+                                st.markdown(f"- Input: `{trace.get('input', '')[:100]}`")
+                                st.markdown(f"- Result: {trace.get('result', '')}")
+                                st.markdown("---")
+                            else:
+                                status = trace.get("status", "")
+                                st.markdown(f"**Step {step_num}: {status}**")
+                                st.markdown(f"- 💭 **Thought**: {trace.get('thought', '—')}")
+                                st.markdown(f"- ⚡ **Action**: `{trace.get('action', '—')}`")
+                                st.markdown(f"- 👁️ **Observation**: {trace.get('observation', '—')}")
+                                
+                                tok = trace.get("tokens", {})
+                                tool_lat = trace.get("tool_latency_ms", "—")
+                                st.caption(f"LLM Latency: {trace.get('latency_ms', 0)}ms | Tool Latency: {tool_lat}ms | Tokens: {tok.get('total_tokens', 0)}")
+                                st.markdown("---")
+                    
+                    # === COST & EVALUATION PANEL ===
+                    with st.expander("💰 Cost / Token Usage / Evaluation"):
+                        col1, col2, col3, col4 = st.columns(4)
+                        col1.metric("📥 Prompt Tokens", f"{agent.total_prompt_tokens:,}")
+                        col2.metric("📤 Completion Tokens", f"{agent.total_completion_tokens:,}")
+                        col3.metric("🔢 Total Tokens", f"{agent.total_tokens:,}")
+                        col4.metric("💵 Est. Cost", f"${agent.total_cost_usd:.6f}")
+                        
+                        st.markdown("---")
+                        st.markdown("**📈 Evaluation Metrics**")
+                        eval_col1, eval_col2, eval_col3 = st.columns(3)
+                        eval_col1.metric("🔄 ReAct Steps", steps)
+                        eval_col2.metric("⏱️ Total Latency", f"{latency:.2f}s")
+                        eval_col3.metric("📡 LLM Calls", len([t for t in agent.trace_log if t.get("type") == "react_loop"]))
+                    
+                    # === SECURITY PANEL ===
+                    if agent.security_flags:
+                        with st.expander("🔒 Security Audit Log"):
+                            for flag in agent.security_flags:
+                                st.warning(flag)
+                    
+                    # === DEBUG: LLM Raw Output ===
+                    with st.expander("🐛 Debug: LLM Raw Output"):
+                        for trace in agent.trace_log:
+                            if trace.get("type") == "react_loop":
+                                st.code(trace.get("llm_raw", ""), language="text")
+                    
+                    st.session_state.messages.append({"role": "assistant", "content": result, "meta": meta_str})
             except Exception as e:
                 error_msg = f"Đã xảy ra lỗi hệ thống: {str(e)}"
                 st.error(error_msg)
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
+

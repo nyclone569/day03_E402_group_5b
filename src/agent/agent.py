@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import unicodedata
 from typing import List, Dict, Any, Optional
 from src.core.llm_provider import LLMProvider
@@ -17,6 +18,16 @@ class ReActAgent:
         self.tools = tools
         self.max_steps = max_steps
         self.history = []
+        
+        # === Trace & Evaluation System ===
+        self.trace_log: List[Dict[str, Any]] = []   # Từng bước Thought/Action/Observation
+        self.current_steps = 0
+        self.total_tokens = 0
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
+        self.total_cost_usd = 0.0
+        self.total_latency_ms = 0
+        self.security_flags: List[str] = []          # Ghi lại các cảnh báo bảo mật
 
     def get_system_prompt(self) -> str:
         """
@@ -53,9 +64,16 @@ class ReActAgent:
         """Guardrail: Strict Intent Check focusing exclusively on 3 usecases."""
         clean_input = self._remove_accents(user_input).upper()
         
+        # === Security: Kiểm tra Prompt Injection ===
+        injection_patterns = r'(IGNORE PREVIOUS|SYSTEM PROMPT|FORGET INSTRUCTIONS|REVEAL API)'
+        if re.search(injection_patterns, clean_input):
+            self.security_flags.append(f"⚠️ Prompt Injection detected: '{user_input[:80]}'")
+            return False
+        
         # 1. Explicit Keyword Blacklist (Phát hiện ngay những thứ cấm)
         forbidden_patterns = r'\b(VANG|FOREX|COIN|CRYPTO|BITCOIN|DAT LENH|MUA|BAN)\b'
         if re.search(forbidden_patterns, clean_input):
+            self.security_flags.append(f"🚫 Blocked keyword in: '{user_input[:80]}'")
             return False
             
         # 2. Ngặt nghèo (Whitelist): Dùng LLM đánh giá xem có đúng là 1 trong 3 tác vụ không.
@@ -72,11 +90,30 @@ class ReActAgent:
         Nếu là câu hỏi khác (nói chuyện phiếm, tính toán, thời tiết, luật pháp, v.v.), trả lời duy nhất: NO
         """
         response = self.llm.generate(prompt=prompt)
+        self._track_usage(response, "Intent Check")
         decision = response.get("content", "").strip().upper()
         
         if "YES" in decision:
             return True
         return False
+    
+    def _track_usage(self, response: Dict[str, Any], label: str = ""):
+        """Thu thập token usage và latency từ mỗi lần gọi LLM."""
+        usage = response.get("usage", {})
+        latency = response.get("latency_ms", 0)
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        completion_tokens = usage.get("completion_tokens", 0)
+        total = usage.get("total_tokens", 0)
+        
+        self.total_prompt_tokens += prompt_tokens
+        self.total_completion_tokens += completion_tokens
+        self.total_tokens += total
+        self.total_latency_ms += latency
+        
+        # Ước tính chi phí (Gemini API pricing - có thể thay đổi)
+        # Gemma 4 via Gemini API: ~$0.10/1M input, ~$0.30/1M output (ước tính)
+        cost = (prompt_tokens * 0.10 / 1_000_000) + (completion_tokens * 0.30 / 1_000_000)
+        self.total_cost_usd += cost
 
     def run(self, user_input: str) -> str:
         """
@@ -87,17 +124,30 @@ class ReActAgent:
         4. Check Tool Accuracy (Action Error Handler)
         5. Append Observation and repeat
         """
+        # Reset trace cho mỗi lần chạy mới
+        self.trace_log = []
+        self.total_tokens = 0
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
+        self.total_cost_usd = 0.0
+        self.total_latency_ms = 0
+        self.security_flags = []
+        run_start = time.time()
+        
         # Chuẩn hóa Unicode tiếng Việt (NFC) để model LLM xử lý mượt mà hơn
         user_input = self._normalize_vietnamese(user_input)
         
         logger.log_event("AGENT_START", {"input": user_input, "model": self.llm.model_name})
         
         # 1. Guardrail (Intent Check)
+        self.trace_log.append({"step": 0, "type": "guardrail", "action": "Intent Check", "input": user_input})
         if not self._check_intent(user_input):
+            self.trace_log[-1]["result"] = "❌ OUT OF SCOPE"
             logger.log_event("FALLBACK_OUT_OF_SCOPE", {"input": user_input})
             logger.log_event("AGENT_END", {"steps": 0})
             self.current_steps = 0
             return "Xin lỗi, tôi chỉ hỗ trợ tra cứu thông tin tĩnh về Chứng khoán Việt Nam (giá, biểu đồ, mã công ty). Tôi không hỗ trợ đặt lệnh, mua bán, hoặc dự báo vàng/ngoại tệ."
+        self.trace_log[-1]["result"] = "✅ IN SCOPE"
 
         current_prompt = f"User Query: {user_input}\n"
         steps = 0
@@ -109,14 +159,33 @@ class ReActAgent:
         api_failure_count = 0
 
         while steps < self.max_steps:
+            step_start = time.time()
+            
             # Generate LLM response
             result = self.llm.generate(current_prompt, system_prompt=self.get_system_prompt())
+            self._track_usage(result, f"Step {steps + 1}")
             content = result.get("content", "")
             current_prompt += f"{content}\n"
+            
+            # Trích xuất Thought từ LLM output
+            thought_match = re.search(r"Thought:\s*(.*?)(?=Action:|Final Answer:|$)", content, re.DOTALL | re.IGNORECASE)
+            thought_text = thought_match.group(1).strip() if thought_match else "(Không rõ)"
+            
+            step_trace = {
+                "step": steps + 1,
+                "type": "react_loop",
+                "thought": thought_text,
+                "llm_raw": content[:500],  # Giới hạn 500 ký tự để debug
+                "latency_ms": result.get("latency_ms", 0),
+                "tokens": result.get("usage", {}),
+            }
             
             # Check for Final Answer
             final_match = final_answer_regex.search(content)
             if final_match:
+                step_trace["action"] = "Final Answer"
+                step_trace["observation"] = final_match.group(1).strip()[:200]
+                self.trace_log.append(step_trace)
                 logger.log_event("AGENT_END", {"steps": steps + 1})
                 self.current_steps = steps + 1
                 return final_match.group(1).strip()
@@ -126,26 +195,36 @@ class ReActAgent:
             if action_match:
                 tool_name = action_match.group(1).strip()
                 args = action_match.group(2).strip()
+                step_trace["action"] = f"{tool_name}({args})"
                 
                 # Check Action Error (Fallback Action Name)
-                # Test Case "Gõ sai Get_Price"
                 if tool_name not in ValidTools:
-                    # e.g., if tool_name is "Get_Price", advise to use "GetPrice"
+                    obs_msg = f"❌ Tool `{tool_name}` không tồn tại. Hợp lệ: {', '.join(ValidTools)}."
                     current_prompt += f"Observation: Lỗi sai tên Tool! Tool `{tool_name}` không tồn tại. Vui lòng chỉ sử dụng một trong các tool sau: {', '.join(ValidTools)}.\n"
+                    step_trace["observation"] = obs_msg
+                    step_trace["status"] = "⚠️ ACTION_ERROR"
                     logger.log_event("ACTION_ERROR", {"wrong_tool": tool_name})
                 else:
                     # Execute Tool
                     try:
+                        tool_start = time.time()
                         obs = execute_tool_logic(tool_name, args)
+                        tool_latency = int((time.time() - tool_start) * 1000)
                         current_prompt += f"Observation: {obs}\n"
-                        api_failure_count = 0 # reset on success
+                        step_trace["observation"] = obs
+                        step_trace["tool_latency_ms"] = tool_latency
+                        step_trace["status"] = "✅ SUCCESS"
+                        api_failure_count = 0
                     except Exception as e:
-                        # Fallback API Error Handler
                         api_failure_count += 1
+                        step_trace["observation"] = f"❌ API Error: {str(e)}"
+                        step_trace["status"] = f"🔴 API_ERROR (retry {api_failure_count}/3)"
                         logger.log_event("API_ERROR", {"tool_name": tool_name, "error": str(e), "retry_count": api_failure_count})
                         
                         if api_failure_count >= 3:
                             fallback_msg = "Xin lỗi, Dữ liệu API hiện đang cập nhật chậm hoặc bị bảo trì. Vui lòng liên hệ người thật hoặc thử lại sau."
+                            step_trace["status"] = "🚨 HUMAN_ESCALATION"
+                            self.trace_log.append(step_trace)
                             logger.log_event("FALLBACK_HUMAN_ESCALATION", {"failures": api_failure_count})
                             logger.log_event("AGENT_END", {"steps": steps + 1})
                             self.current_steps = steps + 1
@@ -153,9 +232,12 @@ class ReActAgent:
                         else:
                             current_prompt += f"Observation: Lỗi API ({str(e)}). Vui lòng Action thử lại.\n"
             else:
-                # Agent got confused, force it to correct itself
+                step_trace["action"] = "(Sai định dạng)"
+                step_trace["observation"] = "Hệ thống yêu cầu đúng format"
+                step_trace["status"] = "⚠️ FORMAT_ERROR"
                 current_prompt += "Observation: Vui lòng sử dụng đúng định dạng Action: tool_name(args) hoặc Final Answer: nội dung.\n"
             
+            self.trace_log.append(step_trace)
             steps += 1
             
         logger.log_event("AGENT_END", {"steps": steps})
